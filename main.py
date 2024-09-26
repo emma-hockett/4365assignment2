@@ -1,18 +1,21 @@
 import sys
 
 # For reading the variable file
-def read_var(varfile):
+def read_varfile(varfile):
     vars = {}
-    with open(varfile, 'r') as file:
+    with open(varfile) as file:
+        #For each variable, save the variable name and its domain
         for line in file:
             variable, domain = line.split(':')
             vars[variable.strip()] = list(map(int, domain.strip().split()))
     return vars
 
 # For reading the constraints file
-def read_con(confile):
+def read_confile(confile):
     cons = []
-    with open(confile, 'r') as file:
+    with open(confile) as file:
+
+        # For every constraint save the first variable, the operator, and the second variable
         for line in file:
             var1, operator, var2 = line.split()
             cons.append((var1, operator, var2))
@@ -38,7 +41,9 @@ def backTracking(vars, cons):
 
 # Backtracking with forward checking algorihtm
 def forwardChecking(vars, cons):
-
+    """
+        Backtracking with forward checking
+    """
 
 # Reading in the command line arguments and calling the functions
 def main():
@@ -46,20 +51,19 @@ def main():
         print("Usage: python main.py <varfile> <confile> <method>")
         sys.exit(1)
 
-    # Reading in the command line argument and calling methods to parse them
+    # Reading in the command line arguments for the file names
     varfile = sys.argv[1]
     confile = sys.argv[2]
     method = sys.argv[3]
 
-    vars = read_var(varfile)
-    cons = read_con(confile)
+    # Parsing the files to extract the information
+    vars = read_varfile(varfile)
+    cons = read_confile(confile)
 
     # Depending on what the chosen method is, call the correct algorithm
     if method == "none":
-        print("With backtracking")
         backTracking(vars, cons)
     elif method == "fc":
-        print("With forward checking")
         forwardChecking(vars, cons)
     else:
         print("Unknown method")
