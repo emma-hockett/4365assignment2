@@ -39,6 +39,35 @@ def backTracking(vars, cons):
             return failure
     """
 
+    # If assignment complete then return assignment
+
+    """
+    Select one unassigned variable to be the current var, based on the most constrained heuristic. If tied then considers most constraining variable. If still tied then alphabetical
+    """
+    most_constrained_var = None
+    most_constrained_domain = float('inf')
+    for var, domain in vars.items():
+        # If the current variable is more constrained than the previously most constrained variable then it becomes the most constrained variable
+        if len(domain) < most_constrained_domain:
+            most_constrained_domain = len(domain)
+            most_constrained_var = var
+        # If the current variable has the same domain, then tiebreaker is the most constraining variable
+        elif len(domain) == most_constrained_domain:
+            current_var_count = 0
+            mcv_count = 0
+            for con in cons:
+                if var in con:
+                    current_var_count += 1
+                if most_constrained_var in con:
+                    mcv_count +=1
+            # If the current variable is more constraining than it becomes the variable to be used, otherwise stays the same (if same reverts to alphabetical)
+            if current_var_count > mcv_count:
+                most_constrained_var = var
+
+
+
+
+
 # Backtracking with forward checking algorihtm
 def forwardChecking(vars, cons):
     """
