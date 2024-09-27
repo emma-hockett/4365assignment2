@@ -32,68 +32,47 @@ def isAssignmentComplete(vars, assignment):
 
 # Selects the most constrained unassigned variable
 def selectMostConstrained(vars, cons, assignment):
-    unassignedVar = ''
     smallestDomainSize = float('inf')
     tiedVars = {}
 
     # Find the most constrained variables (the fewest domain values)
     for var in vars:
-        # Check only unassigned variables
         if var not in assignment:
             domainSize = len(vars[var])
             if domainSize < smallestDomainSize:
                 smallestDomainSize = domainSize
-                unassignedVar = var
-                # Clear existing values in dictionary and set new most constrained
-                tiedVars = {unassignedVar: vars[var]}
+                tiedVars = {var: vars[var]}  # Clear and add most constrained
             elif domainSize == smallestDomainSize:
-                # Track tied variables
                 tiedVars[var] = vars[var]
 
-    # No tie is present, return the most constrained variable
+    # No tie present, return the most constrained variable
     if len(tiedVars) == 1:
-        return unassignedVar
+        return next(iter(tiedVars))
 
     # Apply most constraining heuristic to break ties
-    constraintCount = {}
-    for var in tiedVars:
-        constraintCount[var] = 0
+    constraintCount = {var: 0 for var in tiedVars}
 
     for con in cons:
-        var1, op, var2 = con[0], con[1], con[2]
+        var1, _, var2 = con
         if var1 in tiedVars and var2 not in assignment:
             constraintCount[var1] += 1
         if var2 in tiedVars and var1 not in assignment:
             constraintCount[var2] += 1
 
-    # Find the most constraining variable (the highest constraint count)
-    highestConstraints = max(constraintCount.values())
-    tiedVars.clear()
-    for var in constraintCount:
-        if constraintCount[var] == highestConstraints:
-            tiedVars[var] = constraintCount[var]
+    # Find the most constraining variable
+    mostConstrainedVar = max(constraintCount, key=constraintCount.get)
 
-    # Break ties alphabetically if necessary
-    if len(tiedVars) > 1:
-        # Return alphabetically, the smallest variable
-        return min(tiedVars.keys())
-
-    # Return the most constraining variable
-    return list(tiedVars.keys())[0]
+    return mostConstrainedVar
 
 
 # Checks if the assignments are consistent with constraints
 def isConsistentWithConstraints(assignment, cons):
     for con in cons:
-        var1, op, var2 = con[0], con[1], con[2]
+        var1, op, var2 = con
 
         if var1 in assignment and var2 in assignment:
-        # Check constraints on var1 and var2
             if op == '==':
                 if assignment[var1] != assignment[var2]:
-                    return False
-            elif op == '!':
-                if assignment[var1] == assignment[var2]:
                     return False
             elif op == '>':
                 if assignment[var1] <= assignment[var2]:
@@ -101,78 +80,101 @@ def isConsistentWithConstraints(assignment, cons):
             elif op == '<':
                 if assignment[var1] >= assignment[var2]:
                     return False
+            elif op == '!=':
+                if assignment[var1] == assignment[var2]:
+                    return False
+
+    return True
+
+
+# Select the least constraining value, such that it leaves other variables the most options
+def findLeastConstrainingValue(vars, var, cons, assignment):
+    """
+    Returns the values in the domain of `var` in order of least constraining.
+    """
+    domain = vars[var]
+    constraint_count = []
+
+    for value in domain:
+        count = 0
+        temp_assignment = assignment.copy()
+        temp_assignment[var] = value
+
+        # For each value, count how many variables it constrains in the future
+        for con in cons:
+            var1, op, var2 = con
+
+            if var1 == var and var2 not in assignment:
+                for other_value in vars[var2]:
+                    if not isConsistentWithSingleValue(temp_assignment, con, other_value):
+                        count += 1
+            elif var2 == var and var1 not in assignment:
+                for other_value in vars[var1]:
+                    if not isConsistentWithSingleValue(temp_assignment, con, other_value):
+                        count += 1
+
+        constraint_count.append((value, count))
+
+    # Sort the domain by the least constraining values (fewest future constraints)
+    sorted_values = sorted(constraint_count, key=lambda x: (x[1], x[0]))
+
+    # Return only the values, sorted by least constraining
+    return [val for val, _ in sorted_values]
+
+def isConsistentWithSingleValue(assignment, con, other_value):
+    var1, op, var2 = con
+    if var1 in assignment and op == '==':
+        return assignment[var1] == other_value
+    elif var1 in assignment and op == '>':
+        return assignment[var1] > other_value
+    elif var1 in assignment and op == '<':
+        return assignment[var1] < other_value
+    elif var1 in assignment and op == '!=':
+        return assignment[var1] != other_value
     return True
 
 
 # Backtracking without forward checking algorithm
 def backTracking(vars, cons, assignment, branch_count=[1], path=""):
-    """
-    Pseudocode:
+    outString = ""
 
-    Backtracking(assignment, csp):
-        If assignment is complete then return assignment
-        var <-- select one unassigned variable
-        for each value in the domain of var do
-            if value is consistent with assignment then
-                add {var = value} to assignment
-                result <-- Backtrack(assginment, csp)
-                if result != failure then
-                    return result
-                remove {var = value} from assignment
-            return failure
-    """
-
-    # If assignment complete then return assignment
+    # If the assignment is complete, return the solution or a failure
     if isAssignmentComplete(vars, assignment):
-        print(f"{branch_count[0]}. {path} solution")
-        return assignment
+        if isConsistentWithConstraints(assignment, cons):
+            # Print and return solution
+            outString = f"{branch_count[0]}. " + ', '.join([f"{var}={assignment[var]}" for var in assignment]) + " solution"
+            print(outString)
+            return assignment
 
-    # Select most constrained unassigned variable
+    # Select the most constrained unassigned variable
     unassignedVar = selectMostConstrained(vars, cons, assignment)
 
-    for domainValue in vars[unassignedVar]:
+    values = findLeastConstrainingValue(vars, unassignedVar, cons, assignment)
+    valuesLeftToTry = len(values)
 
-        current_path = f"{path}, {unassignedVar}={domainValue}" if path else f"{unassignedVar}={domainValue}"
+    # Get the least constraining values for the variable
+    for domainValue in values:
+        # Make a new assignment
+        current_path = f"{path}, {unassignedVar} = {domainValue}" if path else f"{unassignedVar}={domainValue}"
         assignment[unassignedVar] = domainValue
 
-        # Check if assignment is consistent
+        # Check if the current assignment is consistent
         if isConsistentWithConstraints(assignment, cons):
             result = backTracking(vars, cons, assignment, branch_count, current_path)
             if result is not None:
                 return result
-        else:
-            print(f"{branch_count[0]}. {current_path} failure")
+
+
+        # If no valid assignment found for this path, print failure (for partial assignments)
+        if valuesLeftToTry != 0:
+            outString = f"{branch_count[0]}. " + ', '.join([f"{var}={assignment[var]}" for var in assignment]) + f" failure"
+            print(outString)
             branch_count[0] += 1
 
-        # Backtrack due to failure
+        # Backtrack by removing the variable from the assignment
         assignment.pop(unassignedVar)
 
-    # Failure
     return None
-
-    #
-    # """
-    # Select one unassigned variable to be the current var, based on the most constrained heuristic. If tied then considers most constraining variable. If still tied then alphabetical
-    # """
-    # most_constrained_var = None
-    # most_constrained_domain = float('inf')
-    # for var, domain in vars.items():
-    #     # If the current variable is more constrained than the previously most constrained variable then it becomes the most constrained variable
-    #     if len(domain) < most_constrained_domain:
-    #         most_constrained_domain = len(domain)
-    #         most_constrained_var = var
-    #     # If the current variable has the same domain, then tiebreaker is the most constraining variable
-    #     elif len(domain) == most_constrained_domain:
-    #         current_var_count = 0
-    #         mcv_count = 0
-    #         for con in cons:
-    #             if var in con:
-    #                 current_var_count += 1
-    #             if most_constrained_var in con:
-    #                 mcv_count +=1
-    #         # If the current variable is more constraining than it becomes the variable to be used, otherwise stays the same (if same reverts to alphabetical)
-    #         if current_var_count > mcv_count:
-    #             most_constrained_var = var
 
 
 # Backtracking with forward checking algorithm
@@ -198,9 +200,9 @@ def main():
     cons = read_confile(confile)
 
     # Depending on what the chosen method is, call the correct algorithm
-    if method == "none":
+    if method.lower() == "none":
         backTracking(vars, cons, {})
-    elif method == "fc":
+    elif method.lower() == "fc":
         forwardChecking(vars, cons, {})
     else:
         print("Unknown method")
