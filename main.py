@@ -136,6 +136,7 @@ def isConsistentWithSingleValue(assignment, con, other_value):
 
 # Backtracking without forward checking algorithm
 def backTracking(vars, cons, assignment):
+    allValuesTried = False
     outString = ""
 
     # If the assignment is complete, return the solution or a failure
@@ -146,7 +147,7 @@ def backTracking(vars, cons, assignment):
                 outString += f"{var}={assignment[var]}, "
             outString = outString.strip(", ") + " solution"
             print(outString)
-            return assignment
+            return assignment, False
 
     # Select the most constrained unassigned variable
     unassignedVar = selectMostConstrained(vars, cons, assignment)
@@ -160,22 +161,28 @@ def backTracking(vars, cons, assignment):
 
         # Check if the current assignment is consistent
         if isConsistentWithConstraints(assignment, cons):
-            result = backTracking(vars, cons, assignment)
+            result, valuesLeft = backTracking(vars, cons, assignment)
             if result is not None:
-                return result
+                return result, False
+            if valuesLeft == True:
+                allValuesTried = True
 
-        # If no valid assignment found for this path, print failure (for partial assignments)
-        if valuesLeftToTry != 0:
+        # If no valid assignment found for this path, print failure
+        if not allValuesTried or valuesLeftToTry == 1:
             outString = ', '.join([f"{var}={assignment[var]}" for var in assignment]) + " failure"
             print(outString)
 
         valuesLeftToTry -= 1
-        print(str(valuesLeftToTry) + " " + unassignedVar)
+        # print("Current value tried for " + unassignedVar + " is " + str(domainValue))
+        # print("Values left to try: " + str(valuesLeftToTry) + " for " + unassignedVar)
 
         # Backtrack by removing the variable from the assignment
         assignment.pop(unassignedVar)
 
-    return None
+    if valuesLeftToTry == 0:
+        return None, True
+
+    return None, False
 
 
 # Backtracking with forward checking algorithm
