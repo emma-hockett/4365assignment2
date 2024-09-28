@@ -30,7 +30,13 @@ def isAssignmentComplete(vars, assignment):
     return False
 
 
-# Selects the most constrained unassigned variable
+''' Selects the most constrained unassigned variable based on
+    1) the smallest domain size
+    2) if tied, then select by most constraining heuristic
+    3) if tied, then select variable alphabetically
+'''
+
+
 def selectMostConstrained(vars, cons, assignment):
     smallestDomainSize = float('inf')
     tiedVars = {}
@@ -71,7 +77,7 @@ def isConsistentWithConstraints(assignment, cons):
         var1, op, var2 = con
 
         if var1 in assignment and var2 in assignment:
-            if op == '==':
+            if op == '=':
                 if assignment[var1] != assignment[var2]:
                     return False
             elif op == '>':
@@ -80,17 +86,16 @@ def isConsistentWithConstraints(assignment, cons):
             elif op == '<':
                 if assignment[var1] >= assignment[var2]:
                     return False
-            elif op == '!=':
+            elif op == '!':
                 if assignment[var1] == assignment[var2]:
                     return False
-
     return True
 
 
 # Select the least constraining value, such that it leaves other variables the most options
 def findLeastConstrainingValue(vars, var, cons, assignment):
     """
-    Returns the values in the domain of `var` in order of least constraining.
+        Returns the values in the domain of `var` in order of least constraining.
     """
     domain = vars[var]
     constraint_count = []
@@ -115,21 +120,22 @@ def findLeastConstrainingValue(vars, var, cons, assignment):
 
         constraint_count.append((value, count))
 
-    # Sort the domain by the least constraining values (fewest future constraints)
+    # Sort the domain by the least constraining values (the fewest future constraints)
     sorted_values = sorted(constraint_count, key=lambda x: (x[1], x[0]))
 
     # Return only the values, sorted by least constraining
     return [val for val, _ in sorted_values]
 
+
 def isConsistentWithSingleValue(assignment, con, other_value):
     var1, op, var2 = con
-    if var1 in assignment and op == '==':
+    if var1 in assignment and op == '=':
         return assignment[var1] == other_value
     elif var1 in assignment and op == '>':
         return assignment[var1] > other_value
     elif var1 in assignment and op == '<':
         return assignment[var1] < other_value
-    elif var1 in assignment and op == '!=':
+    elif var1 in assignment and op == '!':
         return assignment[var1] != other_value
     return True
 
@@ -139,13 +145,13 @@ def backTracking(vars, cons, assignment):
     allValuesTried = False
     outString = ""
 
-    # If the assignment is complete, return the solution or a failure
+    # If the assignment is complete and consistent with constraints, return the solution
     if isAssignmentComplete(vars, assignment):
         if isConsistentWithConstraints(assignment, cons):
-            # Print and return solution
             for var in assignment:
-                outString += f"{var}={assignment[var]}, "
-            outString = outString.strip(", ") + " solution"
+                outString += var + " = " + str(assignment[var]) + ", "
+            outString = outString[0:len(outString)-2]
+            outString += "  solution"
             print(outString)
             return assignment, False
 
@@ -154,9 +160,9 @@ def backTracking(vars, cons, assignment):
 
     values = findLeastConstrainingValue(vars, unassignedVar, cons, assignment)
     valuesLeftToTry = len(values)
+
     # Get the least constraining values for the variable
     for domainValue in values:
-        # Make a new assignment
         assignment[unassignedVar] = domainValue
 
         # Check if the current assignment is consistent
@@ -167,16 +173,17 @@ def backTracking(vars, cons, assignment):
             if valuesLeft == True:
                 allValuesTried = True
 
-        # If no valid assignment found for this path, print failure
+        # No valid assignment found for this path
         if not allValuesTried or valuesLeftToTry == 1:
-            outString = ', '.join([f"{var}={assignment[var]}" for var in assignment]) + " failure"
+            outString = ''
+            for var in assignment:
+                outString += var + " = " + str(assignment[var]) + ", "
+            outString = outString[0:len(outString) - 2]
+            outString += "  failure"
             print(outString)
 
         valuesLeftToTry -= 1
-        # print("Current value tried for " + unassignedVar + " is " + str(domainValue))
-        # print("Values left to try: " + str(valuesLeftToTry) + " for " + unassignedVar)
-
-        # Backtrack by removing the variable from the assignment
+        # Backtrack
         assignment.pop(unassignedVar)
 
     if valuesLeftToTry == 0:
@@ -185,11 +192,112 @@ def backTracking(vars, cons, assignment):
     return None, False
 
 
+""" 
+    Reduce the domains of unassigned variables
+    that are inconsistent with constraints.
+"""
+def forwardCheck(assignedVar, assignedValue, domains, cons, assignment):
+    for con in cons:
+        var1, op, var2 = con[0], con[1], con[2]
+        newDomain = []
+        if var1 == assignedVar and var2 not in assignment:
+            for value in domains[var2]:
+                newDomain.append(value)
+            for value in domains[var2]:
+                if not satisfiesConstraint(assignedValue, op, value):
+                    newDomain.remove(value)
+
+            # Failure if newDomain is empty
+            if len(newDomain) == 0:
+                return False
+            else:
+                # Update the domain
+                domains[var2] = newDomain
+
+        elif var2 == assignedVar and var1 not in assignment:
+            for value in domains[var1]:
+                newDomain.append(value)
+            for value in domains[var1]:
+                if not satisfiesConstraint(value, op, assignedValue):
+                    newDomain.remove(value)
+
+            if len(newDomain) == 0:
+                return False
+            else:
+                # Update the domain
+                domains[var1] = newDomain
+
+    # New domain is not empty
+    return True
+
+
+def satisfiesConstraint(value1, op, value2):
+    if op == '=':
+        return value1 == value2
+    elif op == '!':
+        return value1 != value2
+    elif op == '>':
+        return value1 > value2
+    elif op == '<':
+        return value1 < value2
+    return False
+
+
 # Backtracking with forward checking algorithm
-def forwardChecking(vars, cons):
+def forwardChecking(vars, cons, assignment):
+
+    """ Select a variable and assign it a value
+        After assigning the variable to value,
+        iterate over the unassigned variables constrained by that variable
+        for each unassigned variable, remove values that are inconsistent with the assignment
+        backtrack if the domain of the unassigned variables become empty
     """
-        Backtracking with forward checking
-    """
+
+    outString = ''
+
+    # If the assignment is complete and consistent with constraints, return the solution
+    if isAssignmentComplete(vars, assignment):
+        if isConsistentWithConstraints(assignment, cons):
+            for var in assignment:
+                outString += var + " = " + str(assignment[var]) + ", "
+            outString = outString[0:len(outString)-2]
+            outString += "  solution"
+            print(outString)
+            return assignment
+
+    # Select the most constrained unassigned variable
+    unassignedVar = selectMostConstrained(vars, cons, assignment)
+
+    values = findLeastConstrainingValue(vars, unassignedVar, cons, assignment)
+    domains = {}
+
+    # Create a shallow copy to track domain values for unassigned variables
+    for var in vars:
+        domains[var] = vars[var]
+
+    # Iterate through each value in order of the least constrained
+    for value in values:
+        assignment[unassignedVar] = value
+
+        forwardCheckSucceeded = forwardCheck(unassignedVar, value, domains, cons, assignment)
+        if forwardCheckSucceeded:
+            # Recurse with updated assignments and domains
+            resultExists = forwardChecking(domains, cons, assignment)
+            if resultExists:
+                return resultExists
+
+        outString = ''
+        for var in assignment:
+            outString += var + " = " + str(assignment[var]) + ", "
+        outString = outString[0:len(outString) - 2]
+        outString += "  failure"
+        print(outString)
+
+        # Backtrack
+        del assignment[unassignedVar]
+
+    # No solution
+    return None
 
 
 # Reading in the command line arguments and calling the functions
