@@ -34,6 +34,10 @@ def isAssignmentComplete(vars, assignment):
     1) the smallest domain size
     2) if tied, then select by most constraining heuristic
     3) if tied, then select variable alphabetically
+    
+    Selects the value for the unassigned variable based on 
+    1) the least constraining value
+    2) if tied, favor the lower value
 '''
 
 
@@ -109,39 +113,48 @@ def findLeastConstrainingValue(vars, var, cons, assignment):
         for con in cons:
             var1, op, var2 = con
 
+            # If the one being tested is the first in the constraint, check it's temporary assignment against all values of the other variable in the constraint
             if var1 == var and var2 not in assignment:
+                valid_values = 0
                 for other_value in vars[var2]:
-                    if not isConsistentWithSingleValue(temp_assignment, con, other_value):
-                        count += 1
+                    #If there is a valid value for the unassigned variable against the temp then increase the valid value count
+                    if isConsistentWithSingleValue(temp_assignment[var1], op, other_value):
+                        valid_values += 1
+                count += valid_values
+            # If the one being tested is the second in the constraint, check it's temporary assignment against all values of the other variable in the constraint
             elif var2 == var and var1 not in assignment:
+                valid_values=0
                 for other_value in vars[var1]:
-                    if not isConsistentWithSingleValue(temp_assignment, con, other_value):
-                        count += 1
+                    # If there is a valid value for the unassigned variable against the temp then increase valid value count
+                    if isConsistentWithSingleValue(other_value, op, temp_assignment[var2]):
+                        valid_values += 1
+                count += valid_values
 
         constraint_count.append((value, count))
 
-    # Sort the domain by the least constraining values (the fewest future constraints)
-    sorted_values = sorted(constraint_count, key=lambda x: (x[1], x[0]))
+    # Sort the domain by the most valid values left for the unassigned variables
+    sorted_values = sorted(constraint_count, key=lambda x: (-x[1], x[0]))
 
     # Return only the values, sorted by least constraining
     return [val for val, _ in sorted_values]
 
 
-def isConsistentWithSingleValue(assignment, con, other_value):
-    var1, op, var2 = con
-    if var1 in assignment and op == '=':
-        return assignment[var1] == other_value
-    elif var1 in assignment and op == '>':
-        return assignment[var1] > other_value
-    elif var1 in assignment and op == '<':
-        return assignment[var1] < other_value
-    elif var1 in assignment and op == '!':
-        return assignment[var1] != other_value
+def isConsistentWithSingleValue(temp_assignment, op, other_value):
+    # Checks the temporary assignment against the values from the unassigned variable
+    if op == '=':
+        return temp_assignment == other_value
+    elif op == '>':
+        return temp_assignment > other_value
+    elif op == '<':
+        return temp_assignment < other_value
+    elif op == '!':
+        return (temp_assignment!= other_value)
     return True
 
 
 # Backtracking without forward checking algorithm
 def backTracking(vars, cons, assignment, branch_count=[1], path=""):
+
     allValuesTried = False
     outString = ""
 
@@ -155,8 +168,8 @@ def backTracking(vars, cons, assignment, branch_count=[1], path=""):
 
     # Select the most constrained unassigned variable
     unassignedVar = selectMostConstrained(vars, cons, assignment)
-
     values = findLeastConstrainingValue(vars, unassignedVar, cons, assignment)
+
     valuesLeftToTry = len(values)
 
     # Get the least constraining values for the variable
@@ -164,6 +177,7 @@ def backTracking(vars, cons, assignment, branch_count=[1], path=""):
 
         current_path = f"{path}, {unassignedVar}={domainValue}" if path else f"{unassignedVar}={domainValue}"
         assignment[unassignedVar] = domainValue
+        values = findLeastConstrainingValue(vars, unassignedVar, cons, assignment)
 
         # Check if the current assignment is consistent
         if isConsistentWithConstraints(assignment, cons):
