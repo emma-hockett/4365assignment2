@@ -1,4 +1,5 @@
 import sys
+import copy
 
 
 # For reading the variable file
@@ -208,38 +209,30 @@ def backTracking(vars, cons, assignment, branch_count=[1], path=""):
     that are inconsistent with constraints.
 """
 def forwardCheck(assignedVar, assignedValue, domains, cons, assignment):
+    newDomains = copy.deepcopy(domains)
     for con in cons:
         var1, op, var2 = con[0], con[1], con[2]
-        newDomain = []
         if var1 == assignedVar and var2 not in assignment:
-            for value in domains[var2]:
-                newDomain.append(value)
-            for value in domains[var2]:
-                if not satisfiesConstraint(assignedValue, op, value):
-                    newDomain.remove(value)
-
-            # Failure if newDomain is empty
+            newDomain = []
+            for value in newDomains[var2]:
+                if satisfiesConstraint(assignedValue, op, value):
+                    newDomain.append(value)
+            # Fails if domain is empty
             if len(newDomain) == 0:
                 return False
-            else:
-                # Update the domain
-                domains[var2] = newDomain
+            newDomains[var2] = newDomain # Update the domain of unassigned variable
 
         elif var2 == assignedVar and var1 not in assignment:
-            for value in domains[var1]:
-                newDomain.append(value)
-            for value in domains[var1]:
-                if not satisfiesConstraint(value, op, assignedValue):
-                    newDomain.remove(value)
-
+            newDomain = []
+            for value in newDomains[var1]:
+                if satisfiesConstraint(value, op, assignedValue):
+                    newDomain.append(value)
             if len(newDomain) == 0:
                 return False
-            else:
-                # Update the domain
-                domains[var1] = newDomain
+            newDomains[var1] = newDomain
 
-    # New domain is not empty
-    return True
+    # Return the new domains
+    return newDomains
 
 
 def satisfiesConstraint(value1, op, value2):
@@ -255,7 +248,7 @@ def satisfiesConstraint(value1, op, value2):
 
 
 # Backtracking with forward checking algorithm
-def forwardChecking(vars, cons, assignment, branch_count=[1], path=""):
+def forwardChecking(vars, cons, assignment, branch_count=[1]):
 
     """ Select a variable and assign it a value
         After assigning the variable to value,
@@ -277,7 +270,7 @@ def forwardChecking(vars, cons, assignment, branch_count=[1], path=""):
     unassignedVar = selectMostConstrained(vars, cons, assignment)
 
     values = findLeastConstrainingValue(vars, unassignedVar, cons, assignment)
-    domains = {}
+    domains = copy.deepcopy(vars)
 
     # Create a shallow copy to track domain values for unassigned variables
     for var in vars:
@@ -287,19 +280,19 @@ def forwardChecking(vars, cons, assignment, branch_count=[1], path=""):
     for value in values:
         assignment[unassignedVar] = value
 
-        forwardCheckSucceeded = forwardCheck(unassignedVar, value, domains, cons, assignment)
-        if forwardCheckSucceeded:
+        newDomains = forwardCheck(unassignedVar, value, domains, cons, assignment)
+        if newDomains:
             # Recurse with updated assignments and domains
-            resultExists = forwardChecking(domains, cons, assignment)
+            resultExists = forwardChecking(newDomains, cons, assignment)
             if resultExists:
                 return resultExists
 
-        outString = ''
         outString = f"{branch_count[0]}. " + ', '.join([f"{var}={assignment[var]}" for var in assignment]) + " failure"
         print(outString)
 
         # Backtrack
         del assignment[unassignedVar]
+        branch_count[0] += 1
 
     # No solution
     return None
