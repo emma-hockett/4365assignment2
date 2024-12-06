@@ -289,6 +289,7 @@ def forwardChecking(vars, cons, assignment, branch_count=[1]):
 
         outString = f"{branch_count[0]}. " + ', '.join([f"{var}={assignment[var]}" for var in assignment]) + " failure"
         print(outString)
+        branch_count[0] += 1
 
         # Backtrack
         del assignment[unassignedVar]
